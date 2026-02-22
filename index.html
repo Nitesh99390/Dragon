@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Flappy Adventure</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #222; }
+        canvas { display: block; margin: 0 auto; background: #70c5ce; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .ui {
+            position: absolute; top: 20px; width: 100%; text-align: center;
+            color: white; font-size: 24px; pointer-events: none; text-shadow: 2px 2px #000;
+        }
+        #restart-btn {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 15px 30px; font-size: 20px; background: #ff9f43; color: white;
+            border: none; border-radius: 10px; cursor: pointer; display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ui">स्कोर: <span id="score">0</span></div>
+    <button id="restart-btn" onclick="resetGame()">फिर से शुरू करें</button>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreEl = document.getElementById("score");
+        const restartBtn = document.getElementById("restart-btn");
+
+        // स्क्रीन साइज के हिसाब से सेट करें
+        canvas.width = 400;
+        canvas.height = 600;
+
+        // गेम वेरिएबल्स
+        let birdY = 300;
+        let birdX = 50;
+        let velocity = 0;
+        let gravity = 0.25;
+        let jump = -4.5;
+        let score = 0;
+        let pipes = [];
+        let frame = 0;
+        let isGameOver = false;
+
+        // पाइप्स की सेटिंग
+        const pipeWidth = 50;
+        const pipeGap = 150;
+
+        function drawBird() {
+            ctx.fillStyle = "#f1c40f"; // पीला पक्षी
+            ctx.beginPath();
+            ctx.arc(birdX, birdY, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#000";
+            ctx.stroke();
+            // आँख
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.arc(birdX + 7, birdY - 5, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function createPipe() {
+            let minPipeHeight = 50;
+            let maxPipeHeight = canvas.height - pipeGap - minPipeHeight;
+            let height = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1) + minPipeHeight);
+            
+            pipes.push({
+                x: canvas.width,
+                top: height,
+                bottom: canvas.height - height - pipeGap,
+                passed: false
+            });
+        }
+
+        function drawPipes() {
+            ctx.fillStyle = "#2ecc71"; // हरा पाइप
+            pipes.forEach(pipe => {
+                // ऊपर वाला पाइप
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.top);
+                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.top);
+                // नीचे वाला पाइप
+                ctx.fillRect(pipe.x, canvas.height - pipe.bottom, pipeWidth, pipe.bottom);
+                ctx.strokeRect(pipe.x, canvas.height - pipe.bottom, pipeWidth, pipe.bottom);
+                
+                pipe.x -= 2; // पाइप की गति
+            });
+
+            // पुराने पाइप्स हटाना
+            if (pipes.length > 0 && pipes[0].x < -pipeWidth) {
+                pipes.shift();
+            }
+        }
+
+        function checkCollision() {
+            if (birdY + 15 > canvas.height || birdY - 15 < 0) return true;
+
+            for (let pipe of pipes) {
+                if (birdX + 15 > pipe.x && birdX - 15 < pipe.x + pipeWidth) {
+                    if (birdY - 15 < pipe.top || birdY + 15 > canvas.height - pipe.bottom) {
+                        return true;
+                    }
+                }
+                if (!pipe.passed && birdX > pipe.x + pipeWidth) {
+                    score++;
+                    scoreEl.innerText = score;
+                    pipe.passed = true;
+                }
+            }
+            return false;
+        }
+
+        function update() {
+            if (isGameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // बैकग्राउंड (आसमान)
+            ctx.fillStyle = "#70c5ce";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // चिड़िया की गति
+            velocity += gravity;
+            birdY += velocity;
+
+            drawPipes();
+            drawBird();
+
+            if (frame % 100 === 0) createPipe();
+            if (checkCollision()) {
+                isGameOver = true;
+                restartBtn.style.display = "block";
+            }
+
+            frame++;
+            requestAnimationFrame(update);
+        }
+
+        // कंट्रोल
+        function handleAction() {
+            if (!isGameOver) {
+                velocity = jump;
+            }
+        }
+
+        window.addEventListener("keydown", (e) => { if(e.code === "Space") handleAction(); });
+        canvas.addEventListener("touchstart", (e) => { e.preventDefault(); handleAction(); });
+
+        function resetGame() {
+            birdY = 300;
+            velocity = 0;
+            score = 0;
+            scoreEl.innerText = 0;
+            pipes = [];
+            frame = 0;
+            isGameOver = false;
+            restartBtn.style.display = "none";
+            update();
+        }
+
+        update();
+    </script>
+</body>
+</html>
