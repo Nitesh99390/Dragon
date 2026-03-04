@@ -1,167 +1,203 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultimate Flappy Adventure</title>
+    <title>Catch Master: Developer Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #222; }
-        canvas { display: block; margin: 0 auto; background: #70c5ce; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .ui {
-            position: absolute; top: 20px; width: 100%; text-align: center;
-            color: white; font-size: 24px; pointer-events: none; text-shadow: 2px 2px #000;
+        :root { --primary: #00ffcc; --danger: #ff3366; --bg: #0f0f1a; }
+        body {
+            text-align: center;
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: white;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        #restart-btn {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 15px 30px; font-size: 20px; background: #ff9f43; color: white;
-            border: none; border-radius: 10px; cursor: pointer; display: none;
+
+        #game-area {
+            position: relative;
+            width: 350px;
+            height: 450px;
+            background: #1a1a2e;
+            border: 3px solid #333;
+            border-radius: 15px;
+            overflow: hidden;
+            touch-action: none; /* Mobile scroll block karne ke liye */
         }
+
+        #player {
+            width: 80px;
+            height: 15px;
+            background: var(--primary);
+            position: absolute;
+            bottom: 20px;
+            left: 135px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px var(--primary);
+            cursor: grab;
+        }
+
+        #player:active { cursor: grabbing; }
+
+        .item { width: 20px; height: 20px; position: absolute; border-radius: 50%; }
+        .good { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+
+        #ui-panel { margin-bottom: 10px; font-size: 20px; }
+
+        /* Code Injector Styles */
+        #dev-panel {
+            margin-top: 30px;
+            width: 350px;
+            background: #222;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #444;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            background: #000;
+            color: #0f0;
+            border: 1px solid #555;
+            font-family: monospace;
+            margin-top: 10px;
+            border-radius: 5px;
+        }
+        .btn {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .btn-start { background: var(--primary); color: #000; }
+        .btn-inject { background: #ffcc00; color: #000; }
     </style>
 </head>
 <body>
 
-    <div class="ui">स्कोर: <span id="score">0</span></div>
-    <button id="restart-btn" onclick="resetGame()">फिर से शुरू करें</button>
-    <canvas id="gameCanvas"></canvas>
+    <div id="ui-panel">Score: <span id="score">0</span></div>
+
+    <div id="game-area" id="main-container">
+        <div id="player"></div>
+    </div>
+
+    <button class="btn btn-start" onclick="startGame()">START GAME</button>
+
+    <div id="dev-panel">
+        <strong>🛠️ Developer Mode</strong><br>
+        <small>Yahan apna naya game code paste karein:</small>
+        <textarea id="customCode" placeholder="Paste your <script> or HTML here..."></textarea>
+        <button class="btn btn-inject" onclick="injectCode()">Insert & Run Code</button>
+    </div>
 
     <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
+        const gameArea = document.getElementById("game-area");
+        const player = document.getElementById("player");
         const scoreEl = document.getElementById("score");
-        const restartBtn = document.getElementById("restart-btn");
-
-        // स्क्रीन साइज के हिसाब से सेट करें
-        canvas.width = 400;
-        canvas.height = 600;
-
-        // गेम वेरिएबल्स
-        let birdY = 300;
-        let birdX = 50;
-        let velocity = 0;
-        let gravity = 0.25;
-        let jump = -4.5;
+        
         let score = 0;
-        let pipes = [];
-        let frame = 0;
-        let isGameOver = false;
+        let gameActive = false;
+        let isDragging = false;
 
-        // पाइप्स की सेटिंग
-        const pipeWidth = 50;
-        const pipeGap = 150;
-
-        function drawBird() {
-            ctx.fillStyle = "#f1c40f"; // पीला पक्षी
-            ctx.beginPath();
-            ctx.arc(birdX, birdY, 15, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = "#000";
-            ctx.stroke();
-            // आँख
-            ctx.fillStyle = "white";
-            ctx.beginPath();
-            ctx.arc(birdX + 7, birdY - 5, 5, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        function createPipe() {
-            let minPipeHeight = 50;
-            let maxPipeHeight = canvas.height - pipeGap - minPipeHeight;
-            let height = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1) + minPipeHeight);
+        // --- Drag Logic ---
+        function moveHandler(e) {
+            if (!isDragging || !gameActive) return;
             
-            pipes.push({
-                x: canvas.width,
-                top: height,
-                bottom: canvas.height - height - pipeGap,
-                passed: false
-            });
+            let rect = gameArea.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let x = clientX - rect.left - (player.offsetWidth / 2);
+
+            if (x < 0) x = 0;
+            if (x > gameArea.offsetWidth - player.offsetWidth) x = gameArea.offsetWidth - player.offsetWidth;
+            
+            player.style.left = x + "px";
         }
 
-        function drawPipes() {
-            ctx.fillStyle = "#2ecc71"; // हरा पाइप
-            pipes.forEach(pipe => {
-                // ऊपर वाला पाइप
-                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.top);
-                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.top);
-                // नीचे वाला पाइप
-                ctx.fillRect(pipe.x, canvas.height - pipe.bottom, pipeWidth, pipe.bottom);
-                ctx.strokeRect(pipe.x, canvas.height - pipe.bottom, pipeWidth, pipe.bottom);
-                
-                pipe.x -= 2; // पाइप की गति
-            });
+        player.addEventListener("mousedown", () => isDragging = true);
+        player.addEventListener("touchstart", () => isDragging = true);
+        window.addEventListener("mouseup", () => isDragging = false);
+        window.addEventListener("touchend", () => isDragging = false);
+        window.addEventListener("mousemove", moveHandler);
+        window.addEventListener("touchmove", moveHandler);
 
-            // पुराने पाइप्स हटाना
-            if (pipes.length > 0 && pipes[0].x < -pipeWidth) {
-                pipes.shift();
-            }
+        // --- Game Logic ---
+        function startGame() {
+            if(gameActive) return;
+            score = 0;
+            scoreEl.innerText = score;
+            gameActive = true;
+            spawnItem();
         }
 
-        function checkCollision() {
-            if (birdY + 15 > canvas.height || birdY - 15 < 0) return true;
+        function spawnItem() {
+            if (!gameActive) return;
+            const item = document.createElement("div");
+            item.className = "item good";
+            item.style.left = Math.random() * (gameArea.offsetWidth - 20) + "px";
+            item.style.top = "0px";
+            gameArea.appendChild(item);
 
-            for (let pipe of pipes) {
-                if (birdX + 15 > pipe.x && birdX - 15 < pipe.x + pipeWidth) {
-                    if (birdY - 15 < pipe.top || birdY + 15 > canvas.height - pipe.bottom) {
-                        return true;
-                    }
-                }
-                if (!pipe.passed && birdX > pipe.x + pipeWidth) {
+            let posY = 0;
+            function fall() {
+                if (!gameActive) { item.remove(); return; }
+                posY += 4;
+                item.style.top = posY + "px";
+
+                let pRect = player.getBoundingClientRect();
+                let iRect = item.getBoundingClientRect();
+
+                if (iRect.bottom >= pRect.top && iRect.left < pRect.right && iRect.right > pRect.left) {
                     score++;
                     scoreEl.innerText = score;
-                    pipe.passed = true;
+                    item.remove();
+                    return;
                 }
+
+                if (posY > 450) {
+                    gameActive = false;
+                    alert("Game Over! Score: " + score);
+                    item.remove();
+                    return;
+                }
+                requestAnimationFrame(fall);
             }
-            return false;
+            requestAnimationFrame(fall);
+            setTimeout(spawnItem, 1000);
         }
 
-        function update() {
-            if (isGameOver) return;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // बैकग्राउंड (आसमान)
-            ctx.fillStyle = "#70c5ce";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // चिड़िया की गति
-            velocity += gravity;
-            birdY += velocity;
-
-            drawPipes();
-            drawBird();
-
-            if (frame % 100 === 0) createPipe();
-            if (checkCollision()) {
-                isGameOver = true;
-                restartBtn.style.display = "block";
+        // --- Code Injector Logic ---
+        function injectCode() {
+            const code = document.getElementById("customCode").value;
+            if (!code.trim()) {
+                alert("Pehle textarea mein code toh daalo!");
+                return;
             }
 
-            frame++;
-            requestAnimationFrame(update);
-        }
-
-        // कंट्रोल
-        function handleAction() {
-            if (!isGameOver) {
-                velocity = jump;
+            // Purane game ko stop karna
+            gameActive = false;
+            
+            // Naye elements ya script inject karna
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = code;
+            
+            // Agar script tag hai toh use execute karna padega manually
+            const scripts = wrapper.getElementsByTagName('script');
+            for (let i = 0; i < scripts.length; i++) {
+                const newScript = document.createElement('script');
+                newScript.text = scripts[i].text;
+                document.body.appendChild(newScript);
             }
+            
+            // HTML content ko area mein daalna
+            gameArea.innerHTML = wrapper.innerHTML;
+            alert("Naya code inject ho gaya!");
         }
-
-        window.addEventListener("keydown", (e) => { if(e.code === "Space") handleAction(); });
-        canvas.addEventListener("touchstart", (e) => { e.preventDefault(); handleAction(); });
-
-        function resetGame() {
-            birdY = 300;
-            velocity = 0;
-            score = 0;
-            scoreEl.innerText = 0;
-            pipes = [];
-            frame = 0;
-            isGameOver = false;
-            restartBtn.style.display = "none";
-            update();
-        }
-
-        update();
     </script>
 </body>
 </html>
